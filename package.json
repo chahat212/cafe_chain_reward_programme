@@ -1,0 +1,28 @@
+{
+  "name": "cafe_chain_reward_programme",
+  "version": "1.0.0",
+  "description": "A café rewards management system that tracks members, purchases, reward points, membership tiers, and redemptions. Supports Silver and Gold tiers with faster earning rates, accurate live balances, and phone-number-based member lookup. Designed to handle any café, member, purchase, and reward efficiently.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chahat212/cafe_chain_reward_programme.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/chahat212/cafe_chain_reward_programme/issues"
+  },
+  "homepage": "https://github.com/chahat212/cafe_chain_reward_programme#readme",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^13.0.3",
+    "ejs": "^6.0.1",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0"
+  }
+}
