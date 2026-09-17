@@ -1,0 +1,29 @@
+<header class="topbar">
+
+  <div class="topbar-brand">
+    <span class="topbar-icon">☕</span> Cafe Rewards
+  </div>
+
+  <nav class="topbar-nav">
+
+    <% if (typeof username !== 'undefined' && username) { %>
+      <a href="/dashboard">Members</a>
+    <% } %>
+
+    <a href="/">Landing</a>
+
+    <% if (typeof username === 'undefined' || !username) { %>
+      <a href="/login">Login</a>
+      <a href="/register">Register</a>
+    <% } %>
+
+  </nav>
+
+  <% if (typeof username !== 'undefined' && username) { %>
+    <form method="POST" action="/logout" class="topbar-logout">
+      <span class="topbar-user"><%= username %></span>
+      <button type="submit">Logout</button>
+    </form>
+  <% } %>
+
+</header>

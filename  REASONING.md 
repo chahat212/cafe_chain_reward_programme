@@ -1,0 +1,500 @@
+# Reasoning Behind the Solution
+
+## 1. Understanding the Problem
+
+* I first broke the problem into the main things the café staff need to do:
+
+  * Find a member quickly.
+  * Record a purchase.
+  * Add the correct points.
+  * Redeem points.
+  * Always show the correct balance.
+  * Track membership tiers.
+  * Handle points that expire.
+  * Notify the member when their tier changes.
+
+* The most important requirement was **point balance correctness**. I did not want the balance to become incorrect if two redemptions happened close together.
+
+---
+
+## 2. Core Idea — Use a Transaction Ledger
+
+* Instead of storing a mutable `balance` column, I decided to treat every point change as a transaction.
+
+Example:
+
+```text
+Purchase       +500
+Purchase       +300
+Redemption     -200
+Expiration     -100
+--------------------
+Balance        = 500
+```
+
+* This makes the history auditable and prevents different parts of the application from maintaining separate balances.
+
+* The current balance is calculated from the transaction history.
+
+---
+
+## 3. Separating Lifetime Points from Current Balance
+
+* I realized that **lifetime earned points** and **current balance** are two different things.
+
+Example:
+
+```text
+Member earns 600 points
+→ Silver
+
+Member redeems 500
+→ Balance = 100
+→ Still Silver
+```
+
+* Therefore, tier calculation uses only points earned from purchases, while the current balance includes purchases, redemptions, and expirations.
+
+---
+
+## 4. Adding Platinum Without Breaking Existing Members
+
+* The Platinum requirement was added as an additional tier rather than changing the existing tiers.
+
+```text
+Bronze    → 0+
+Silver    → 500+
+Gold      → 1500+
+Platinum  → 5000+
+```
+
+* I calculate the tier from lifetime earned points every time.
+* This means existing members are unaffected unless their lifetime points now reach the Platinum threshold.
+
+---
+
+## 5. The Main Challenge — Point Expiration
+
+* Initially, simply using:
+
+```text
+SUM(points_delta)
+```
+
+was enough to calculate the balance.
+
+* But it is **not enough for expiration**.
+
+Example:
+
+```text
+Purchase A → 500 points
+Purchase B → 300 points
+Current balance → 800
+```
+
+If Purchase A becomes 90 days old, I need to know that the unused 500 points from that specific purchase should expire.
+
+* A simple total balance cannot tell me which points are old.
+
+### Solution: Point Lots
+
+* Every purchase creates a separate **point lot**.
+
+```text
+Purchase A → Lot A → 500 points
+Purchase B → Lot B → 300 points
+```
+
+* I then track how many points from each lot have been consumed.
+
+This gives me the remaining points for every purchase.
+
+---
+
+## 6. FIFO Redemption
+
+* For redemption, I decided to consume the oldest available points first.
+
+Example:
+
+```text
+Lot A → 500 points
+Lot B → 300 points
+Lot C → 200 points
+```
+
+If the member redeems 600:
+
+```text
+Lot A → consume 500
+Lot B → consume 100
+Lot B → remaining 200
+Lot C → remaining 200
+```
+
+* The original purchase records are never changed.
+* The consumption is recorded in `lot_allocations`.
+
+This also makes expiration easier because I can identify exactly which points are still unused.
+
+---
+
+## 7. Expiring Points
+
+* Points become eligible for expiration after 90 days.
+
+When a lot becomes stale:
+
+```text
+Remaining Lot Points → Expiration
+```
+
+For example:
+
+```text
+Original lot = 500
+Already redeemed = 200
+Remaining = 300
+
+After 90 days:
+300 points expire
+```
+
+* I create an `expiration` transaction with `-300`.
+* I also create a lot allocation showing that those 300 points were consumed because of expiration.
+
+This keeps the ledger immutable while still tracking the origin of every point.
+
+---
+
+## 8. Why I Added the Simulated Clock
+
+* Waiting 90 real days to test expiration obviously isn't practical.
+
+* So I created a simulated clock.
+
+Normal operation:
+
+```text
+Current time = September 17
+```
+
+Testing:
+
+```text
+POST /clock
+{
+  "now": "December 20..."
+}
+```
+
+* The application then uses this simulated time to check whether point lots are older than 90 days.
+
+This allowed me to test the expiration feature immediately.
+
+---
+
+## 9. Making Redemption Atomic
+
+* Another important issue was concurrent redemption.
+
+Example:
+
+```text
+Balance = 100
+
+Request A → redeem 100
+Request B → redeem 100
+```
+
+If both requests check the balance before either one writes the redemption, both could incorrectly think 100 points are available.
+
+* To prevent this, I put the balance check and redemption inside one database transaction.
+
+Conceptually:
+
+```text
+BEGIN TRANSACTION
+
+Check balance
+      ↓
+Enough points?
+      ↓
+Create redemption
+      ↓
+Consume point lots
+      ↓
+COMMIT
+```
+
+* SQLite serializes competing writes, so the second operation sees the updated state instead of spending the same points again.
+
+---
+
+## 10. Tier-Change Notifications
+
+* I also needed to notify a member when they move to a new tier.
+
+I did not want to send a notification directly from inside the database transaction.
+
+Instead, I used a **transactional outbox**.
+
+Example:
+
+```text
+Purchase
+   ↓
+Tier changes Bronze → Silver
+   ↓
+Purchase transaction + outbox event
+   ↓
+COMMIT
+```
+
+The outbox stores something like:
+
+```json
+{
+  "event_type": "tier_upgraded",
+  "member_id": 1,
+  "payload": {
+    "oldTier": "Bronze",
+    "newTier": "Silver"
+  }
+}
+```
+
+* Both the purchase and notification event are committed together.
+* `/outbox` exposes these events so they can be inspected or processed later.
+
+---
+
+## 11. Keeping the Code Organized
+
+I separated responsibilities instead of putting all logic in `server.js`.
+
+```text
+routes/
+    → Handle HTTP requests
+
+services/loyalty.js
+    → Handle loyalty/business rules
+
+middleware/auth.js
+    → Protect authenticated routes
+
+db.js
+    → Database connection and configuration
+
+schema.sql
+    → Database structure
+```
+
+* This made the code easier to debug and prevented the routes from becoming too complicated.
+
+---
+
+# How I Tested the Solution
+
+## 12. Basic Member Flow
+
+I first tested the normal flow:
+
+```text
+Register
+   ↓
+Login
+   ↓
+Create member
+   ↓
+Search member
+   ↓
+Record purchase
+   ↓
+Check balance
+```
+
+I verified that the points shown on the dashboard matched the transaction history.
+
+---
+
+## 13. Tier Testing
+
+I tested purchases around each tier boundary:
+
+```text
+499 → Bronze
+500 → Silver
+1499 → Silver
+1500 → Gold
+4999 → Gold
+5000 → Platinum
+```
+
+I also checked that redemption did not move a member back to a lower tier.
+
+---
+
+## 14. Redemption Testing
+
+I tested:
+
+* Valid redemption.
+* Redemption of the exact available balance.
+* Redemption greater than the balance.
+* Invalid/zero points.
+* Multiple redemptions.
+* FIFO consumption across multiple point lots.
+
+Example:
+
+```text
+Lot A = 100
+Lot B = 200
+
+Redeem 150
+
+Lot A → 100 consumed
+Lot B → 50 consumed
+Lot B → 150 remaining
+```
+
+---
+
+## 15. Expiration Testing
+
+I created a purchase and then advanced the simulated clock beyond 90 days.
+
+I checked:
+
+```text
+Member balance
+Transaction history
+Point lots
+Expiration transaction
+```
+
+I also tested partially consumed lots.
+
+Example:
+
+```text
+Purchase = 500
+Redeemed = 200
+Remaining = 300
+
+Advance clock by 90+ days
+
+Expiration = 300
+```
+
+---
+
+## 16. Outbox Testing
+
+I checked that:
+
+```text
+Bronze → Bronze
+```
+
+does not create a notification.
+
+But:
+
+```text
+Bronze → Silver
+Silver → Gold
+Gold → Platinum
+```
+
+creates a `tier_upgraded` event.
+
+I also checked that a normal purchase within the same tier does not create another notification.
+
+---
+
+# Issues I Looked For and Fixed
+
+## 17. Balance Accuracy
+
+**Problem:** A mutable balance can become inconsistent with the transaction history.
+
+**Fix:** Use the transaction ledger as the source of truth.
+
+---
+
+## 18. Knowing Which Points Expire
+
+**Problem:** A total balance does not tell me the age of individual points.
+
+**Fix:** Track every purchase as a point lot and track its consumption separately.
+
+---
+
+## 19. Double Redemption
+
+**Problem:** Two requests could potentially spend the same points.
+
+**Fix:** Use an atomic database transaction around the balance check and redemption.
+
+---
+
+## 20. Tier Demotion
+
+**Problem:** Using the current balance for tier calculation would incorrectly demote members after redemption or expiration.
+
+**Fix:** Calculate tiers only from lifetime purchase points.
+
+---
+
+## 21. Notification Reliability
+
+**Problem:** If the purchase succeeds but notification creation fails separately, the system can become inconsistent.
+
+**Fix:** Store the tier-change event in the same database transaction using an outbox.
+
+---
+
+# Final Core Concept
+
+The overall design can be summarized as:
+
+```text
+                 PURCHASE
+                    │
+                    ▼
+              Transaction
+                    │
+                    ├──────► Point Lot
+                    │
+                    ▼
+             Lifetime Points
+                    │
+                    ▼
+              Tier Calculation
+                    │
+             ┌──────┴──────┐
+             │             │
+          Same Tier    New Tier
+             │             │
+             │             ▼
+             │          Outbox
+             │
+             ▼
+       Current Balance
+             │
+       ┌─────┴─────┐
+       │           │
+    Redeem      90 Days
+       │           │
+       ▼           ▼
+   FIFO Lots   Expiration
+```
+
+The main principle I followed was:
+
+> **Keep the transaction history immutable, track the origin of points, and make every balance-changing operation atomic.**
+
+This gives the system an accurate balance, reliable tier calculation, testable expiration, and a clear audit trail without making the architecture unnecessarily complicated.
