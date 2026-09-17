@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title><%= member.name %> — Cafe Rewards</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="app-page">
+  <%- include('partials/navbar') %>
+
+  <main class="page-wrap">
+    <a href="/dashboard" class="back-link">← Back to Members</a>
+
+    <div class="member-header">
+      <div class="member-avatar"><%= member.name.charAt(0).toUpperCase() %></div>
+      <div>
+        <h1><%= member.name %> <span class="badge badge-<%= member.tier %>"><%= member.tier %></span></h1>
+        <p class="page-sub">📞 <%= member.phone %></p>
+      </div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-card stat-highlight">
+        <div class="stat-label">Current Balance</div>
+        <div class="stat-value"><%= member.balance %> <span class="pts-label">pts</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Lifetime Earned</div>
+        <div class="stat-value"><%= member.lifetimeEarned %> <span class="pts-label">pts</span></div>
+      </div>
+    </div>
+
+    <% if (error) { %><p class="error banner-error">⚠ <%= error %></p><% } %>
+
+    <div class="actions-row">
+      <div class="card action-card">
+        <h3>🛒 Record Purchase</h3>
+        <form method="POST" action="/members/<%= member.id %>/purchase">
+          <input name="amount" type="number" step="0.01" placeholder="Amount spent (₹)" required>
+          <button type="submit">Add Purchase</button>
+        </form>
+      </div>
+
+      <div class="card action-card">
+        <h3>🎁 Redeem Points</h3>
+        <form method="POST" action="/members/<%= member.id %>/redeem">
+          <input name="points" type="number" placeholder="Points to redeem" required>
+          <input name="item" placeholder="Item (e.g. Free Latte)" required>
+          <button type="submit">Redeem</button>
+        </form>
+      </div>
+    </div>
+
+    <h3 class="history-title">Transaction History</h3>
+    <div class="table-card">
+      <table>
+        <thead><tr><th>Date</th><th>Type</th><th>Details</th><th>Points</th></tr></thead>
+        <tbody>
+        <% if (history.length === 0) { %>
+          <tr><td colspan="4" class="empty-row">No transactions yet</td></tr>
+        <% } %>
+        <% history.forEach(t => { %>
+        <tr>
+          <td><%= t.created_at %></td>
+          <td><span class="txn-type txn-<%= t.type %>"><%= t.type === 'purchase' ? '🛒 Purchase' : '🎁 Redeem' %></span></td>
+          <td><%= t.type === 'purchase' ? '₹' + t.amount_spent : t.item_redeemed %></td>
+          <td class="<%= t.points_delta > 0 ? 'pts-pos' : 'pts-neg' %>"><%= t.points_delta > 0 ? '+' : '' %><%= t.points_delta %></td>
+        </tr>
+        <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,11 @@
+<header class="topbar">
+  <div class="topbar-brand"><span class="topbar-icon">☕</span> Cafe Rewards</div>
+  <nav class="topbar-nav">
+    <a href="/dashboard">Members</a>
+    <a href="/">Landing</a>
+  </nav>
+  <form method="POST" action="/logout" class="topbar-logout">
+    <span class="topbar-user"><%= username %></span>
+    <button type="submit">Logout</button>
+  </form>
+</header>

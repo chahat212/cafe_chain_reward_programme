@@ -35,7 +35,7 @@ router.get('/members/:id', requireLogin, (req, res) => {
   const member = db.prepare('SELECT * FROM members WHERE id = ?').get(req.params.id);
   if (!member) return res.status(404).send('no such member');
   const history = db.prepare('SELECT * FROM transactions WHERE member_id = ? ORDER BY created_at DESC').all(member.id);
-  res.render('member', { member: memberWithStats(member), history, error: req.query.error || null });
+    res.render('member', { member: memberWithStats(member), history, error: req.query.error || null, username: req.session.username });
 });
 
 router.post('/members/:id/purchase', requireLogin, (req, res) => {

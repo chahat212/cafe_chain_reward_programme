@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Register — Cafe Rewards</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="auth-page">
+  <div class="auth-card">
+    <div class="auth-icon">☕</div>
+    <h1>Create staff account</h1>
+    <p class="auth-subtitle">Set up counter access for Cafe Rewards</p>
+
+    <% if (error) { %><p class="error"><%= error %></p><% } %>
+
+    <form method="POST" action="/register" class="auth-form">
+      <label>Username</label>
+      <input name="username" placeholder="e.g. counter1" required autofocus>
+
+      <label>Password</label>
+      <input name="password" type="password" placeholder="At least 6 characters" required minlength="6">
+
+      <button type="submit">Create account</button>
+    </form>
+
+    <p class="auth-footer">Already registered? <a href="/login">Log in</a></p>
+  </div>
+</body>
+</html>

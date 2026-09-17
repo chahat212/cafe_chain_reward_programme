@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Members — Cafe Rewards</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="app-page">
+  <%- include('partials/navbar') %>
+
+  <main class="page-wrap">
+    <div class="page-head">
+      <div>
+        <h1>Members</h1>
+        <p class="page-sub">Look up a member by name or phone, or add a new one</p>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <form method="GET" action="/dashboard" class="search-form">
+        <span class="search-icon">🔍</span>
+        <input name="search" placeholder="Search by name or phone" value="<%= search %>">
+        <button type="submit">Search</button>
+      </form>
+    </div>
+
+    <details class="add-member-card">
+      <summary>+ Add new member</summary>
+      <form method="POST" action="/members" class="add-member-form">
+        <input name="name" placeholder="Full name" required>
+        <input name="phone" placeholder="Phone number" required>
+        <button type="submit">Add member</button>
+      </form>
+    </details>
+
+    <div class="table-card">
+      <table>
+        <thead>
+          <tr>
+            <th><a href="?search=<%= search %>&sort=name&order=<%= order === 'asc' ? 'desc' : 'asc' %>">Name <%= sort === 'name' ? (order === 'asc' ? '↑' : '↓') : '↕' %></a></th>
+            <th>Phone</th>
+            <th>Tier</th>
+            <th>Balance</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+        <% if (members.length === 0) { %>
+          <tr><td colspan="5" class="empty-row">No members found<% if (search) { %> for "<%= search %>"<% } %></td></tr>
+        <% } %>
+        <% members.forEach(m => { %>
+        <tr>
+          <td class="member-name"><%= m.name %></td>
+          <td><%= m.phone %></td>
+          <td><span class="badge badge-<%= m.tier %>"><%= m.tier %></span></td>
+          <td class="balance-cell"><%= m.balance %> <span class="pts-label">pts</span></td>
+          <td class="view-cell"><a href="/members/<%= m.id %>" class="view-link">View →</a></td>
+        </tr>
+        <% }) %>
+        </tbody>
+      </table>
+    </div>
+
+    <% if (totalPages > 1) { %>
+    <div class="pagination">
+      <% for (let p = 1; p <= totalPages; p++) { %>
+        <a class="<%= p === page ? 'active' : '' %>" href="?search=<%= search %>&page=<%= p %>&sort=<%= sort %>&order=<%= order %>"><%= p %></a>
+      <% } %>
+    </div>
+    <% } %>
+  </main>
+</body>
+</html>
